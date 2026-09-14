@@ -1,5 +1,5 @@
 (() => {
-  const ASSET_VERSION = '5';
+  const ASSET_VERSION = '6';
   const mediaUrl = path => `${path}?v=${ASSET_VERSION}`;
   const PASSWORD_HASH = '4225466f46976e5877d0c8f7a77eafbf97a92841dedabae705816fa4c76e033f';
   const VISITOR_HASHES = {
@@ -97,6 +97,7 @@
   const count = document.querySelector('#photo-count');
   const viewer = document.querySelector('#viewer');
   const stage = viewer.querySelector('.viewer-stage');
+  const downloadLink = document.querySelector('#viewer-download');
   const indexLabel = document.querySelector('#viewer-index');
   const dateLabel = document.querySelector('#viewer-date');
   let current = 0;
@@ -109,6 +110,35 @@
   const getColumnCount = () => window.innerWidth <= 680 ? 2 : window.innerWidth <= 1100 ? 3 : 4;
   let renderedColumns = 0;
   let thumbObserver;
+  let cardMedia = new Map();
+  const primedMedia = new Map();
+  const loadNearbyCards = (index, priority = 'high') => {
+    for (let offset = -2; offset <= 2; offset += 1) cardMedia.get(index + offset)?.loadPreview?.(priority);
+  };
+  const primeMedia = (index, priority = 'low') => {
+    const item = media[index];
+    if (!item) return null;
+    const cached = primedMedia.get(index);
+    if (cached) {
+      if (item.type === 'photo' && priority === 'high') cached.fetchPriority = 'high';
+      return cached;
+    }
+    if (item.type === 'photo') {
+      const image = new Image();
+      image.decoding = 'async';
+      image.fetchPriority = priority;
+      image.src = mediaUrl(item.src);
+      primedMedia.set(index, image);
+      return image;
+    }
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.muted = true;
+    video.playsInline = true;
+    video.src = mediaUrl(item.src);
+    primedMedia.set(index, video);
+    return video;
+  };
   const createCard = (item, index) => {
     const button = document.createElement('button');
     button.className = `card card-${item.type}`;
@@ -122,13 +152,15 @@
       image.className = 'low-res';
       image.src = item.tiny;
       button.classList.add('loaded');
-      image.loadThumbnail = () => {
+      image.loadPreview = (priority = 'auto') => {
         if (image.dataset.loading === 'yes') return;
         image.dataset.loading = 'yes';
+        image.fetchPriority = priority;
         image.addEventListener('load', () => image.classList.remove('low-res'), { once: true });
         image.src = mediaUrl(item.thumb);
       };
-      if (index < 36 || !thumbObserver) image.loadThumbnail();
+      cardMedia.set(index, image);
+      if (index < 16 || !thumbObserver) image.loadPreview(index < 8 ? 'high' : 'auto');
       else thumbObserver.observe(image);
       button.append(image);
     } else {
@@ -136,12 +168,28 @@
       const poster = new Image();
       poster.className = 'video-poster-image';
       poster.alt = '';
-      poster.loading = 'lazy';
       poster.addEventListener('load', () => button.classList.add('loaded'), { once: true });
-      poster.src = mediaUrl(item.poster);
+      poster.loadPreview = (priority = 'auto') => {
+        if (poster.dataset.loading === 'yes') return;
+        poster.dataset.loading = 'yes';
+        poster.fetchPriority = priority;
+        poster.src = mediaUrl(item.poster);
+      };
+      cardMedia.set(index, poster);
+      if (index < 16 || !thumbObserver) poster.loadPreview(index < 8 ? 'high' : 'auto');
+      else thumbObserver.observe(poster);
       button.append(poster);
     }
-    button.addEventListener('click', () => openViewer(index));
+    let hoverTimer;
+    const prioritizeCard = () => loadNearbyCards(index);
+    button.addEventListener('pointerenter', () => {
+      prioritizeCard();
+      hoverTimer = window.setTimeout(() => primeMedia(index, 'high'), 140);
+    });
+    button.addEventListener('pointerleave', () => clearTimeout(hoverTimer));
+    button.addEventListener('focus', () => { prioritizeCard(); primeMedia(index, 'high'); });
+    button.addEventListener('touchstart', prioritizeCard, { passive: true });
+    button.addEventListener('click', () => { primeMedia(index, 'high'); openViewer(index); });
     return button;
   };
   function renderGallery() {
@@ -149,13 +197,14 @@
     if (columnsCount === renderedColumns) return;
     renderedColumns = columnsCount;
     thumbObserver?.disconnect();
+    cardMedia = new Map();
     thumbObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
       entries.forEach(entry => {
         if (!entry.isIntersecting) return;
-        entry.target.loadThumbnail();
+        entry.target.loadPreview(entry.intersectionRatio > 0 ? 'high' : 'auto');
         thumbObserver.unobserve(entry.target);
       });
-    }, { rootMargin: '4000px 0px' }) : null;
+    }, { rootMargin: '900px 0px', threshold: [0, 0.01] }) : null;
     const columns = Array.from({ length: columnsCount }, () => {
       const column = document.createElement('div');
       column.className = 'gallery-column';
@@ -182,9 +231,14 @@
   }
   function renderViewer() {
     const item = media[current];
+    stage.querySelector('video')?.pause();
     stage.replaceChildren();
     if (!item) return;
     stage.classList.add('is-loading');
+    downloadLink.href = mediaUrl(item.src);
+    const extension = item.src.split('.').pop().toLowerCase();
+    downloadLink.download = `hamburger-${item.type}-${String(current + 1).padStart(3, '0')}.${extension}`;
+    downloadLink.textContent = item.type === 'photo' ? '保存照片' : '保存视频';
     if (item.type === 'photo') {
       stage.dataset.loadingText = '正在加载清晰大图…';
       const preview = new Image();
@@ -196,26 +250,30 @@
         if (media[current] === item && stage.contains(preview) && stage.classList.contains('is-loading')) preview.src = mediaUrl(item.thumb);
       };
       thumbImage.src = mediaUrl(item.thumb);
-      const fullImage = new Image();
-      fullImage.decoding = 'async';
-      fullImage.onload = () => {
+      const fullImage = primeMedia(current, 'high');
+      const showFullImage = () => {
         if (media[current] !== item || !stage.contains(preview)) return;
-        preview.src = mediaUrl(item.src);
+        fullImage.alt = `相册照片 ${current + 1}`;
+        stage.replaceChildren(fullImage);
         stage.classList.remove('is-loading');
         preloadNeighbors();
       };
-      fullImage.onerror = () => stage.classList.remove('is-loading');
-      fullImage.src = mediaUrl(item.src);
+      if (fullImage.complete && fullImage.naturalWidth) showFullImage();
+      else {
+        fullImage.addEventListener('load', showFullImage, { once: true });
+        fullImage.addEventListener('error', () => stage.classList.remove('is-loading'), { once: true });
+      }
     } else {
       stage.dataset.loadingText = '正在加载短片…';
-      const video = document.createElement('video');
-      video.src = mediaUrl(item.src);
+      const video = primeMedia(current, 'high');
       video.poster = mediaUrl(item.poster);
       video.controls = true;
       video.autoplay = true;
+      video.muted = false;
       video.playsInline = true;
       video.preload = 'auto';
-      video.addEventListener('canplay', () => stage.classList.remove('is-loading'), { once: true });
+      if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) stage.classList.remove('is-loading');
+      else video.addEventListener('canplay', () => stage.classList.remove('is-loading'), { once: true });
       video.addEventListener('error', () => stage.classList.remove('is-loading'), { once: true });
       stage.append(video);
     }
@@ -224,12 +282,11 @@
   }
   function preloadNeighbors() {
     [-1, 1].forEach(offset => {
-      const neighbor = media[(current + offset + media.length) % media.length];
-      if (neighbor?.type === 'photo') { const image = new Image(); image.src = mediaUrl(neighbor.src); }
+      primeMedia((current + offset + media.length) % media.length, 'low');
     });
   }
   function openViewer(index) { current = index; renderViewer(); viewer.showModal(); document.body.style.overflow = 'hidden'; }
-  function closeViewer() { viewer.close(); document.body.style.overflow = ''; stage.replaceChildren(); }
+  function closeViewer() { stage.querySelector('video')?.pause(); viewer.close(); document.body.style.overflow = ''; stage.replaceChildren(); }
   function move(delta) { current = (current + delta + media.length) % media.length; renderViewer(); }
 
   viewer.querySelector('.viewer-close').addEventListener('click', closeViewer);
@@ -243,10 +300,10 @@
     if (event.key === 'ArrowRight') move(1);
   });
   viewer.addEventListener('touchstart', event => {
-    touchStart = event.target.closest('video, button') ? null : event.changedTouches[0].clientX;
+    touchStart = event.target.closest('video, button, a') ? null : event.changedTouches[0].clientX;
   }, { passive: true });
   viewer.addEventListener('touchend', event => {
-    if (touchStart === null || event.target.closest('video, button')) return;
+    if (touchStart === null || event.target.closest('video, button, a')) return;
     const distance = event.changedTouches[0].clientX - touchStart;
     if (Math.abs(distance) > 55) move(distance > 0 ? -1 : 1);
     touchStart = null;
