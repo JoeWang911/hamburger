@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#17100c">
+  <meta name="description" content="汉堡包的私人时光相册">
+  <title>汉堡包 · Hamburger</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='18' fill='%23f24b2a'/%3E%3Cpath d='M13 29c1-10 9-16 19-16s18 6 19 16H13Z' fill='%23ffd46b'/%3E%3Cpath d='M11 34h42v8H11z' fill='%234f9e55'/%3E%3Cpath d='M14 45h36c-1 5-5 7-10 7H24c-5 0-9-2-10-7Z' fill='%23ffd46b'/%3E%3Ccircle cx='25' cy='20' r='1.4' fill='%23fff3ce'/%3E%3Ccircle cx='36' cy='18' r='1.4' fill='%23fff3ce'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="locked">
+  <div class="grain" aria-hidden="true"></div>
+  <section id="lock-screen" class="lock-screen" aria-labelledby="lock-title">
+    <div class="lock-card">
+      <div class="lock-burger" aria-hidden="true"><span></span><span></span><span></span></div>
+      <p class="lock-kicker">PRIVATE ALBUM</p>
+      <h1 id="lock-title">汉堡包</h1>
+      <p class="lock-copy">输入密码，打开我们的时光切片。</p>
+      <form id="lock-form">
+        <label for="album-password">相册密码</label>
+        <div class="password-row">
+          <input id="album-password" name="password" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="12" autocomplete="current-password" placeholder="••••" required autofocus>
+          <button type="submit" aria-label="进入相册">进入</button>
+        </div>
+        <p id="lock-error" class="lock-error" role="alert" aria-live="polite"></p>
+      </form>
+    </div>
+  </section>
+  <header class="masthead">
+    <a class="brand" href="#top" aria-label="回到相册顶部">
+      <span class="brand-cn">汉堡包</span>
+      <span class="brand-en">HAMBURGER</span>
+    </a>
+    <div class="album-meta">
+      <span id="photo-count">正在整理回忆…</span>
+      <span class="spark" aria-hidden="true">✦</span>
+      <button id="shuffle" type="button">随机漫游</button>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="intro" aria-labelledby="album-title">
+      <div class="eyebrow">A LITTLE ARCHIVE OF JOY</div>
+      <h1 id="album-title"><span class="title-line">把喜欢的瞬间，</span><span class="title-line"><em>一口一口</em><span class="mobile-line">收藏起来。</span></span></h1>
+      <p>向下翻，回到那些闪闪发光的日子。</p>
+      <div class="scroll-mark" aria-hidden="true"><span></span></div>
+    </section>
+
+    <section class="gallery-shell" aria-label="照片和视频">
+      <div id="gallery" class="gallery"></div>
+    </section>
+  </main>
+
+  <footer>
+    <span>汉堡包的时光切片</span>
+    <span>Made with memories</span>
+  </footer>
+
+  <dialog id="viewer" class="viewer" aria-label="全屏照片浏览">
+    <button class="viewer-close" type="button" aria-label="关闭">×</button>
+    <button class="viewer-nav viewer-prev" type="button" aria-label="上一张">‹</button>
+    <div class="viewer-stage"></div>
+    <button class="viewer-nav viewer-next" type="button" aria-label="下一张">›</button>
+    <div class="viewer-caption"><span id="viewer-index"></span><span id="viewer-date"></span></div>
+  </dialog>
+
+  <script src="media.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
