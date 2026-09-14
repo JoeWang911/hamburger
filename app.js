@@ -1,15 +1,50 @@
 (() => {
   const PASSWORD_HASH = '4225466f46976e5877d0c8f7a77eafbf97a92841dedabae705816fa4c76e033f';
+  const VISITOR_HASH = '9f77c4517ffa5375fb7f06c0209facae53fd5e4b7b88986eb0c11591810b2dbe';
   const lockScreen = document.querySelector('#lock-screen');
   const lockForm = document.querySelector('#lock-form');
   const passwordInput = document.querySelector('#album-password');
   const lockError = document.querySelector('#lock-error');
-  const unlock = () => {
+  const visitorExpired = document.querySelector('#visitor-expired');
+  let visitorTimer;
+  const unlock = access => {
     document.body.classList.remove('locked');
     lockScreen.classList.add('unlocked');
-    try { sessionStorage.setItem('hamburger-unlocked', 'yes'); } catch (_) {}
+    try { sessionStorage.setItem('hamburger-access', access); } catch (_) {}
   };
-  try { if (sessionStorage.getItem('hamburger-unlocked') === 'yes') unlock(); } catch (_) {}
+  const relock = () => {
+    clearTimeout(visitorTimer);
+    try {
+      sessionStorage.removeItem('hamburger-access');
+      sessionStorage.removeItem('hamburger-visitor-deadline');
+      sessionStorage.removeItem('hamburger-unlocked');
+    } catch (_) {}
+    const viewer = document.querySelector('#viewer');
+    if (viewer?.open) viewer.close();
+    document.body.classList.add('locked');
+    document.body.style.overflow = '';
+    lockScreen.classList.remove('unlocked');
+    passwordInput.value = '';
+  };
+  const endVisitorAccess = () => {
+    relock();
+    visitorExpired.showModal();
+  };
+  const scheduleVisitorExit = deadline => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) endVisitorAccess();
+    else visitorTimer = setTimeout(endVisitorAccess, remaining);
+  };
+  try {
+    const access = sessionStorage.getItem('hamburger-access');
+    if (access === 'owner' || sessionStorage.getItem('hamburger-unlocked') === 'yes') {
+      unlock('owner');
+    } else if (access === 'visitor') {
+      const deadline = Number(sessionStorage.getItem('hamburger-visitor-deadline'));
+      if (deadline > Date.now()) { unlock('visitor'); scheduleVisitorExit(deadline); }
+      else relock();
+    }
+  } catch (_) {}
   lockForm.addEventListener('submit', async event => {
     event.preventDefault();
     const bytes = new TextEncoder().encode(passwordInput.value);
@@ -18,11 +53,32 @@
     if (hash === PASSWORD_HASH) {
       lockError.textContent = '';
       passwordInput.value = '';
-      unlock();
+      unlock('owner');
+    } else if (hash === VISITOR_HASH) {
+      let alreadyUsed = true;
+      try { alreadyUsed = localStorage.getItem('hamburger-visitor-used') === 'yes'; } catch (_) {}
+      if (alreadyUsed) {
+        lockError.textContent = '访客体验已经结束，请输入完整密码。';
+        passwordInput.select();
+        return;
+      }
+      const deadline = Date.now() + 10000;
+      try {
+        localStorage.setItem('hamburger-visitor-used', 'yes');
+        sessionStorage.setItem('hamburger-visitor-deadline', String(deadline));
+      } catch (_) {}
+      lockError.textContent = '';
+      passwordInput.value = '';
+      unlock('visitor');
+      scheduleVisitorExit(deadline);
     } else {
       lockError.textContent = '密码不对，再试一次。';
       passwordInput.select();
     }
+  });
+  visitorExpired.querySelector('button').addEventListener('click', () => {
+    visitorExpired.close();
+    passwordInput.focus();
   });
 
   const media = Array.isArray(window.HAMBURGER_MEDIA) ? window.HAMBURGER_MEDIA : [];
