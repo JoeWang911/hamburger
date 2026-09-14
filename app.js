@@ -1,6 +1,9 @@
 (() => {
   const PASSWORD_HASH = '4225466f46976e5877d0c8f7a77eafbf97a92841dedabae705816fa4c76e033f';
-  const VISITOR_HASH = '9f77c4517ffa5375fb7f06c0209facae53fd5e4b7b88986eb0c11591810b2dbe';
+  const VISITOR_HASHES = {
+    '9f77c4517ffa5375fb7f06c0209facae53fd5e4b7b88986eb0c11591810b2dbe': '0823',
+    'bdc9fc73f65aece77761e33bcb3bc5571a2d06d8185d5f403f0442dffb0c3cf3': '0911'
+  };
   const lockScreen = document.querySelector('#lock-screen');
   const lockForm = document.querySelector('#lock-form');
   const passwordInput = document.querySelector('#album-password');
@@ -54,9 +57,14 @@
       lockError.textContent = '';
       passwordInput.value = '';
       unlock('owner');
-    } else if (hash === VISITOR_HASH) {
+    } else if (VISITOR_HASHES[hash]) {
+      const visitorId = VISITOR_HASHES[hash];
+      const visitorKey = `hamburger-visitor-used-${visitorId}`;
       let alreadyUsed = true;
-      try { alreadyUsed = localStorage.getItem('hamburger-visitor-used') === 'yes'; } catch (_) {}
+      try {
+        alreadyUsed = localStorage.getItem(visitorKey) === 'yes' ||
+          (visitorId === '0823' && localStorage.getItem('hamburger-visitor-used') === 'yes');
+      } catch (_) {}
       if (alreadyUsed) {
         lockError.textContent = '访客体验已经结束，请输入完整密码。';
         passwordInput.select();
@@ -64,7 +72,8 @@
       }
       const deadline = Date.now() + 10000;
       try {
-        localStorage.setItem('hamburger-visitor-used', 'yes');
+        localStorage.setItem(visitorKey, 'yes');
+        if (visitorId === '0823') localStorage.setItem('hamburger-visitor-used', 'yes');
         sessionStorage.setItem('hamburger-visitor-deadline', String(deadline));
       } catch (_) {}
       lockError.textContent = '';
