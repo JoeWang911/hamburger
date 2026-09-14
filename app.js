@@ -1,5 +1,5 @@
 (() => {
-  const ASSET_VERSION = '9';
+  const ASSET_VERSION = '10';
   const mediaUrl = path => `${path}?v=${ASSET_VERSION}`;
   const PASSWORD_HASH = '4225466f46976e5877d0c8f7a77eafbf97a92841dedabae705816fa4c76e033f';
   const VISITOR_HASHES = {
@@ -112,6 +112,25 @@
   let thumbObserver;
   let cardMedia = new Map();
   const primedMedia = new Map();
+  let backgroundLoadGeneration = 0;
+  const wait = milliseconds => new Promise(resolve => window.setTimeout(resolve, milliseconds));
+  const continueGalleryLoading = startIndex => {
+    const generation = ++backgroundLoadGeneration;
+    const queue = Array.from({ length: media.length - 1 }, (_, offset) => (startIndex + offset + 1) % media.length);
+    const worker = async () => {
+      while (queue.length && generation === backgroundLoadGeneration && viewer.open) {
+        const target = cardMedia.get(queue.shift());
+        if (!target?.loadPreview) continue;
+        await Promise.race([target.loadPreview('low'), wait(8000)]);
+        await wait(80);
+      }
+    };
+    worker();
+    worker();
+  };
+  const startBackgroundWhenOpen = startIndex => window.requestAnimationFrame(() => {
+    if (viewer.open && current === startIndex) continueGalleryLoading(startIndex);
+  });
   const loadNearbyCards = index => {
     cardMedia.get(index)?.loadPreview?.('high');
     cardMedia.get(index - 1)?.loadPreview?.('auto');
@@ -156,10 +175,14 @@
       button.classList.add('loaded');
       image.loadPreview = (priority = 'auto') => {
         image.fetchPriority = priority;
-        if (image.dataset.loading === 'yes') return;
+        if (image.dataset.loading === 'yes') return image.previewPromise || Promise.resolve();
         image.dataset.loading = 'yes';
-        image.addEventListener('load', () => image.classList.remove('low-res'), { once: true });
+        image.previewPromise = new Promise(resolve => {
+          image.addEventListener('load', () => { image.classList.remove('low-res'); resolve(); }, { once: true });
+          image.addEventListener('error', resolve, { once: true });
+        });
         image.src = mediaUrl(item.thumb);
+        return image.previewPromise;
       };
       cardMedia.set(index, image);
       if (index < 8 || !thumbObserver) image.loadPreview(index < 4 ? 'high' : 'auto');
@@ -170,12 +193,16 @@
       const poster = new Image();
       poster.className = 'video-poster-image';
       poster.alt = '';
-      poster.addEventListener('load', () => button.classList.add('loaded'), { once: true });
       poster.loadPreview = (priority = 'auto') => {
         poster.fetchPriority = priority;
-        if (poster.dataset.loading === 'yes') return;
+        if (poster.dataset.loading === 'yes') return poster.previewPromise || Promise.resolve();
         poster.dataset.loading = 'yes';
+        poster.previewPromise = new Promise(resolve => {
+          poster.addEventListener('load', () => { button.classList.add('loaded'); resolve(); }, { once: true });
+          poster.addEventListener('error', resolve, { once: true });
+        });
         poster.src = mediaUrl(item.poster);
+        return poster.previewPromise;
       };
       cardMedia.set(index, poster);
       if (index < 8 || !thumbObserver) poster.loadPreview(index < 4 ? 'high' : 'auto');
@@ -264,6 +291,7 @@
         stage.replaceChildren(fullImage);
         stage.classList.remove('is-loading');
         preloadNeighbors();
+        startBackgroundWhenOpen(current);
       };
       fullImage.addEventListener('load', showFullImage, { once: true });
       fullImage.addEventListener('error', () => stage.classList.remove('is-loading'), { once: true });
@@ -278,8 +306,9 @@
       video.muted = false;
       video.playsInline = true;
       video.preload = 'auto';
-      if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) stage.classList.remove('is-loading');
-      else video.addEventListener('canplay', () => stage.classList.remove('is-loading'), { once: true });
+      const videoReady = () => { stage.classList.remove('is-loading'); startBackgroundWhenOpen(current); };
+      if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) videoReady();
+      else video.addEventListener('canplay', videoReady, { once: true });
       video.addEventListener('error', () => stage.classList.remove('is-loading'), { once: true });
       stage.append(video);
     }
@@ -292,7 +321,7 @@
     });
   }
   function openViewer(index) { current = index; renderViewer(); viewer.showModal(); document.body.style.overflow = 'hidden'; }
-  function closeViewer() { stage.querySelector('video')?.pause(); viewer.close(); document.body.style.overflow = ''; stage.replaceChildren(); }
+  function closeViewer() { backgroundLoadGeneration += 1; stage.querySelector('video')?.pause(); viewer.close(); document.body.style.overflow = ''; stage.replaceChildren(); }
   function move(delta) { current = (current + delta + media.length) % media.length; renderViewer(); }
 
   viewer.querySelector('.viewer-close').addEventListener('click', closeViewer);
