@@ -1,5 +1,5 @@
 (() => {
-  const ASSET_VERSION = '4';
+  const ASSET_VERSION = '5';
   const mediaUrl = path => `${path}?v=${ASSET_VERSION}`;
   const PASSWORD_HASH = '4225466f46976e5877d0c8f7a77eafbf97a92841dedabae705816fa4c76e033f';
   const VISITOR_HASHES = {
@@ -108,6 +108,7 @@
 
   const getColumnCount = () => window.innerWidth <= 680 ? 2 : window.innerWidth <= 1100 ? 3 : 4;
   let renderedColumns = 0;
+  let thumbObserver;
   const createCard = (item, index) => {
     const button = document.createElement('button');
     button.className = `card card-${item.type}`;
@@ -117,17 +118,27 @@
       button.style.aspectRatio = `${item.width} / ${item.height}`;
       const image = new Image();
       image.alt = '';
-      image.loading = 'lazy';
       image.decoding = 'async';
-      image.addEventListener('load', () => button.classList.add('loaded'), { once: true });
-      image.src = mediaUrl(item.thumb);
-      if (image.complete) button.classList.add('loaded');
+      image.className = 'low-res';
+      image.src = item.tiny;
+      button.classList.add('loaded');
+      image.loadThumbnail = () => {
+        if (image.dataset.loading === 'yes') return;
+        image.dataset.loading = 'yes';
+        image.addEventListener('load', () => image.classList.remove('low-res'), { once: true });
+        image.src = mediaUrl(item.thumb);
+      };
+      if (index < 36 || !thumbObserver) image.loadThumbnail();
+      else thumbObserver.observe(image);
       button.append(image);
     } else {
       button.style.aspectRatio = '16 / 10';
-      const poster = document.createElement('span');
-      poster.className = 'video-poster';
-      poster.textContent = 'VIDEO';
+      const poster = new Image();
+      poster.className = 'video-poster-image';
+      poster.alt = '';
+      poster.loading = 'lazy';
+      poster.addEventListener('load', () => button.classList.add('loaded'), { once: true });
+      poster.src = mediaUrl(item.poster);
       button.append(poster);
     }
     button.addEventListener('click', () => openViewer(index));
@@ -137,6 +148,14 @@
     const columnsCount = getColumnCount();
     if (columnsCount === renderedColumns) return;
     renderedColumns = columnsCount;
+    thumbObserver?.disconnect();
+    thumbObserver = 'IntersectionObserver' in window ? new IntersectionObserver(entries => {
+      entries.forEach(entry => {
+        if (!entry.isIntersecting) return;
+        entry.target.loadThumbnail();
+        thumbObserver.unobserve(entry.target);
+      });
+    }, { rootMargin: '4000px 0px' }) : null;
     const columns = Array.from({ length: columnsCount }, () => {
       const column = document.createElement('div');
       column.className = 'gallery-column';
@@ -169,9 +188,14 @@
     if (item.type === 'photo') {
       stage.dataset.loadingText = '正在加载清晰大图…';
       const preview = new Image();
-      preview.src = mediaUrl(item.thumb);
+      preview.src = item.tiny || mediaUrl(item.thumb);
       preview.alt = `相册照片 ${current + 1}`;
       stage.append(preview);
+      const thumbImage = new Image();
+      thumbImage.onload = () => {
+        if (media[current] === item && stage.contains(preview) && stage.classList.contains('is-loading')) preview.src = mediaUrl(item.thumb);
+      };
+      thumbImage.src = mediaUrl(item.thumb);
       const fullImage = new Image();
       fullImage.decoding = 'async';
       fullImage.onload = () => {
@@ -186,6 +210,7 @@
       stage.dataset.loadingText = '正在加载短片…';
       const video = document.createElement('video');
       video.src = mediaUrl(item.src);
+      video.poster = mediaUrl(item.poster);
       video.controls = true;
       video.autoplay = true;
       video.playsInline = true;
