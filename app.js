@@ -1,4 +1,6 @@
 (() => {
+  const ASSET_VERSION = '4';
+  const mediaUrl = path => `${path}?v=${ASSET_VERSION}`;
   const PASSWORD_HASH = '4225466f46976e5877d0c8f7a77eafbf97a92841dedabae705816fa4c76e033f';
   const VISITOR_HASHES = {
     '9f77c4517ffa5375fb7f06c0209facae53fd5e4b7b88986eb0c11591810b2dbe': '0823',
@@ -118,7 +120,7 @@
       image.loading = 'lazy';
       image.decoding = 'async';
       image.addEventListener('load', () => button.classList.add('loaded'), { once: true });
-      image.src = item.thumb;
+      image.src = mediaUrl(item.thumb);
       if (image.complete) button.classList.add('loaded');
       button.append(image);
     } else {
@@ -167,23 +169,23 @@
     if (item.type === 'photo') {
       stage.dataset.loadingText = '正在加载清晰大图…';
       const preview = new Image();
-      preview.src = item.thumb;
+      preview.src = mediaUrl(item.thumb);
       preview.alt = `相册照片 ${current + 1}`;
       stage.append(preview);
       const fullImage = new Image();
       fullImage.decoding = 'async';
       fullImage.onload = () => {
         if (media[current] !== item || !stage.contains(preview)) return;
-        preview.src = item.src;
+        preview.src = mediaUrl(item.src);
         stage.classList.remove('is-loading');
         preloadNeighbors();
       };
       fullImage.onerror = () => stage.classList.remove('is-loading');
-      fullImage.src = item.src;
+      fullImage.src = mediaUrl(item.src);
     } else {
       stage.dataset.loadingText = '正在加载短片…';
       const video = document.createElement('video');
-      video.src = item.src;
+      video.src = mediaUrl(item.src);
       video.controls = true;
       video.autoplay = true;
       video.playsInline = true;
@@ -198,7 +200,7 @@
   function preloadNeighbors() {
     [-1, 1].forEach(offset => {
       const neighbor = media[(current + offset + media.length) % media.length];
-      if (neighbor?.type === 'photo') { const image = new Image(); image.src = neighbor.src; }
+      if (neighbor?.type === 'photo') { const image = new Image(); image.src = mediaUrl(neighbor.src); }
     });
   }
   function openViewer(index) { current = index; renderViewer(); viewer.showModal(); document.body.style.overflow = 'hidden'; }
