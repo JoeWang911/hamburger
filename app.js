@@ -104,35 +104,56 @@
   const videos = media.length - photos;
   count.textContent = `${photos} 张照片 · ${videos} 段短片`;
 
-  const fragment = document.createDocumentFragment();
-  media.forEach((item, index) => {
+  const getColumnCount = () => window.innerWidth <= 680 ? 2 : window.innerWidth <= 1100 ? 3 : 4;
+  let renderedColumns = 0;
+  const createCard = (item, index) => {
     const button = document.createElement('button');
     button.className = `card card-${item.type}`;
     button.type = 'button';
     button.setAttribute('aria-label', item.type === 'photo' ? `打开第 ${index + 1} 张照片` : `播放第 ${index + 1} 个短片`);
     if (item.type === 'photo') {
+      button.style.aspectRatio = `${item.width} / ${item.height}`;
       const image = new Image();
-      image.src = item.thumb;
       image.alt = '';
       image.loading = 'lazy';
       image.decoding = 'async';
-      image.width = item.width;
-      image.height = item.height;
+      image.addEventListener('load', () => button.classList.add('loaded'), { once: true });
+      image.src = item.thumb;
+      if (image.complete) button.classList.add('loaded');
       button.append(image);
     } else {
-      const video = document.createElement('video');
-      video.src = item.src;
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = 'metadata';
-      button.append(video);
-      button.addEventListener('mouseenter', () => video.play().catch(() => {}));
-      button.addEventListener('mouseleave', () => { video.pause(); video.currentTime = 0; });
+      button.style.aspectRatio = '16 / 10';
+      const poster = document.createElement('span');
+      poster.className = 'video-poster';
+      poster.textContent = 'VIDEO';
+      button.append(poster);
     }
     button.addEventListener('click', () => openViewer(index));
-    fragment.append(button);
+    return button;
+  };
+  function renderGallery() {
+    const columnsCount = getColumnCount();
+    if (columnsCount === renderedColumns) return;
+    renderedColumns = columnsCount;
+    const columns = Array.from({ length: columnsCount }, () => {
+      const column = document.createElement('div');
+      column.className = 'gallery-column';
+      return column;
+    });
+    const heights = new Array(columnsCount).fill(0);
+    media.forEach((item, index) => {
+      const shortest = heights.indexOf(Math.min(...heights));
+      columns[shortest].append(createCard(item, index));
+      heights[shortest] += item.type === 'photo' ? item.height / item.width : 0.625;
+    });
+    gallery.replaceChildren(...columns);
+  }
+  renderGallery();
+  let resizeTimer;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(renderGallery, 180);
   });
-  gallery.append(fragment);
 
   function formatDate(value) {
     const date = new Date(value);
@@ -142,13 +163,43 @@
     const item = media[current];
     stage.replaceChildren();
     if (!item) return;
-    const element = item.type === 'photo' ? new Image() : document.createElement('video');
-    element.src = item.src;
-    element.alt = item.type === 'photo' ? `相册照片 ${current + 1}` : '';
-    if (item.type === 'video') { element.controls = true; element.autoplay = true; element.playsInline = true; }
-    stage.append(element);
+    stage.classList.add('is-loading');
+    if (item.type === 'photo') {
+      stage.dataset.loadingText = '正在加载清晰大图…';
+      const preview = new Image();
+      preview.src = item.thumb;
+      preview.alt = `相册照片 ${current + 1}`;
+      stage.append(preview);
+      const fullImage = new Image();
+      fullImage.decoding = 'async';
+      fullImage.onload = () => {
+        if (media[current] !== item || !stage.contains(preview)) return;
+        preview.src = item.src;
+        stage.classList.remove('is-loading');
+        preloadNeighbors();
+      };
+      fullImage.onerror = () => stage.classList.remove('is-loading');
+      fullImage.src = item.src;
+    } else {
+      stage.dataset.loadingText = '正在加载短片…';
+      const video = document.createElement('video');
+      video.src = item.src;
+      video.controls = true;
+      video.autoplay = true;
+      video.playsInline = true;
+      video.preload = 'auto';
+      video.addEventListener('canplay', () => stage.classList.remove('is-loading'), { once: true });
+      video.addEventListener('error', () => stage.classList.remove('is-loading'), { once: true });
+      stage.append(video);
+    }
     indexLabel.textContent = `${String(current + 1).padStart(2, '0')} / ${String(media.length).padStart(2, '0')}`;
     dateLabel.textContent = formatDate(item.date);
+  }
+  function preloadNeighbors() {
+    [-1, 1].forEach(offset => {
+      const neighbor = media[(current + offset + media.length) % media.length];
+      if (neighbor?.type === 'photo') { const image = new Image(); image.src = neighbor.src; }
+    });
   }
   function openViewer(index) { current = index; renderViewer(); viewer.showModal(); document.body.style.overflow = 'hidden'; }
   function closeViewer() { viewer.close(); document.body.style.overflow = ''; stage.replaceChildren(); }
@@ -164,10 +215,14 @@
     if (event.key === 'ArrowLeft') move(-1);
     if (event.key === 'ArrowRight') move(1);
   });
-  viewer.addEventListener('touchstart', event => { touchStart = event.changedTouches[0].clientX; }, { passive: true });
+  viewer.addEventListener('touchstart', event => {
+    touchStart = event.target.closest('video, button') ? null : event.changedTouches[0].clientX;
+  }, { passive: true });
   viewer.addEventListener('touchend', event => {
+    if (touchStart === null || event.target.closest('video, button')) return;
     const distance = event.changedTouches[0].clientX - touchStart;
     if (Math.abs(distance) > 55) move(distance > 0 ? -1 : 1);
+    touchStart = null;
   }, { passive: true });
   document.querySelector('#shuffle').addEventListener('click', () => {
     if (!media.length) return;
