@@ -116,7 +116,7 @@ h1 em { color: var(--tomato); font-style: normal; text-decoration: underline; te
 .card-photo { background: linear-gradient(135deg,#2c211b,#120d0a 65%); }
 .card img { display: block; width: 100%; height: 100%; object-fit: cover; opacity: 0; background: #120d0a; transition: opacity .28s, transform .55s cubic-bezier(.2,.8,.2,1), filter .4s; }
 .card.loaded img { opacity: 1; }
-.card img.low-res { filter: blur(9px) saturate(.8); transform: scale(1.08); }
+.card img.low-res { filter: saturate(.96) contrast(.98); transform: scale(1.015); }
 .card:hover img { transform: scale(1.025); filter: saturate(1.08); }
 .card::after { content: "打开"; position: absolute; right: 12px; bottom: 12px; padding: 7px 10px; color: white; background: rgba(24,15,11,.75); border: 1px solid rgba(255,255,255,.3); border-radius: 999px; font-size: .72rem; opacity: 0; transform: translateY(5px); transition: .25s; }
 .card:hover::after, .card:focus-visible::after { opacity: 1; transform: none; }

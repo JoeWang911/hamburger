@@ -1,5 +1,5 @@
 (() => {
-  const ASSET_VERSION = '6';
+  const ASSET_VERSION = '7';
   const mediaUrl = path => `${path}?v=${ASSET_VERSION}`;
   const PASSWORD_HASH = '4225466f46976e5877d0c8f7a77eafbf97a92841dedabae705816fa4c76e033f';
   const VISITOR_HASHES = {
